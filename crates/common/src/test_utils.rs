@@ -1,7 +1,88 @@
-//! Various test utils used in other pathfinder related crates
+pub mod middleware {
+    use jsonrpsee::server::logger::Logger;
 
-/// Metrics related test aids
-pub mod metrics {
+    #[derive(Debug, Clone)]
+    pub struct RpcMetricsMiddleware;
+
+    impl Logger for RpcMetricsMiddleware {
+        type Instant = ();
+
+        fn on_connect(
+            &self,
+            _remote_addr: std::net::SocketAddr,
+            _request: &jsonrpsee::server::logger::HttpRequest,
+        ) {
+        }
+
+        fn on_request(&self) -> Self::Instant {}
+
+        fn on_call(
+            &self,
+            method_name: &str,
+            _params: jsonrpsee::types::Params<'_>,
+            _kind: jsonrpsee::server::logger::MethodKind,
+        ) {
+            metrics::increment_counter!("rpc_method_calls_total", "method" => method_name.to_owned());
+        }
+
+        fn on_result(&self, method_name: &str, success: bool, _started_at: Self::Instant) {
+            if !success {
+                metrics::increment_counter!("rpc_method_calls_failed_total", "method" => method_name.to_owned());
+            }
+        }
+
+        fn on_response(&self, _result: &str, _started_at: Self::Instant) {}
+
+        fn on_disconnect(&self, _remote_addr: std::net::SocketAddr) {}
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum MaybeRpcMetricsMiddleware {
+        Middleware(RpcMetricsMiddleware),
+        NoOp,
+    }
+
+    impl Logger for MaybeRpcMetricsMiddleware {
+        type Instant = ();
+
+        fn on_connect(
+            &self,
+            _remote_addr: std::net::SocketAddr,
+            _request: &jsonrpsee::server::logger::HttpRequest,
+        ) {
+        }
+
+        fn on_request(&self) -> Self::Instant {}
+
+        fn on_call(
+            &self,
+            method_name: &str,
+            params: jsonrpsee::types::Params<'_>,
+            kind: jsonrpsee::server::logger::MethodKind,
+        ) {
+            match self {
+                MaybeRpcMetricsMiddleware::Middleware(x) => x.on_call(method_name, params, kind),
+                MaybeRpcMetricsMiddleware::NoOp => {}
+            }
+        }
+
+        fn on_result(&self, method_name: &str, success: bool, started_at: Self::Instant) {
+            match self {
+                MaybeRpcMetricsMiddleware::Middleware(x) => {
+                    x.on_result(method_name, success, started_at)
+                }
+                MaybeRpcMetricsMiddleware::NoOp => {}
+            }
+        }
+
+        fn on_response(&self, _result: &str, _started_at: Self::Instant) {}
+
+        fn on_disconnect(&self, _remote_addr: std::net::SocketAddr) {}
+    }
+}
+
+#[cfg(test)]
+pub mod test {
     use metrics::{
         Counter, CounterFn, Gauge, Histogram, Key, KeyName, Label, Recorder, SharedString, Unit,
     };

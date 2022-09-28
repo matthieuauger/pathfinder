@@ -2113,10 +2113,20 @@ name = "jsonrpsee"
 version = "0.11.0"
 source = "git+https://github.com/eqlabs/jsonrpsee?branch=start_with_paths#f649a44410cb28424f483c72cefa5a948a06e7af"
 dependencies = [
- "jsonrpsee-core",
+ "jsonrpsee-core 0.11.0",
  "jsonrpsee-http-server",
- "jsonrpsee-types",
+ "jsonrpsee-types 0.11.0",
  "jsonrpsee-ws-server",
+]
+
+[[package]]
+name = "jsonrpsee"
+version = "0.15.1"
+source = "git+https://github.com/eqlabs/jsonrpsee?rev=a23589bc3988a28506ed8a37527b6adc04f31627#a23589bc3988a28506ed8a37527b6adc04f31627"
+dependencies = [
+ "jsonrpsee-core 0.15.1",
+ "jsonrpsee-server",
+ "jsonrpsee-types 0.15.1",
 ]
 
 [[package]]
@@ -2133,7 +2143,32 @@ dependencies = [
  "futures-timer",
  "futures-util",
  "hyper",
- "jsonrpsee-types",
+ "jsonrpsee-types 0.11.0",
+ "parking_lot 0.12.1",
+ "rand",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "soketto",
+ "thiserror",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "jsonrpsee-core"
+version = "0.15.1"
+source = "git+https://github.com/eqlabs/jsonrpsee?rev=a23589bc3988a28506ed8a37527b6adc04f31627#a23589bc3988a28506ed8a37527b6adc04f31627"
+dependencies = [
+ "anyhow",
+ "arrayvec",
+ "async-trait",
+ "beef",
+ "futures-channel",
+ "futures-util",
+ "globset",
+ "hyper",
+ "jsonrpsee-types 0.15.1",
  "parking_lot 0.12.1",
  "rand",
  "rustc-hash",
@@ -2154,13 +2189,34 @@ dependencies = [
  "futures-util",
  "globset",
  "hyper",
- "jsonrpsee-core",
- "jsonrpsee-types",
+ "jsonrpsee-core 0.11.0",
+ "jsonrpsee-types 0.11.0",
  "lazy_static",
  "serde_json",
  "tokio",
  "tracing",
  "unicase",
+]
+
+[[package]]
+name = "jsonrpsee-server"
+version = "0.15.1"
+source = "git+https://github.com/eqlabs/jsonrpsee?rev=a23589bc3988a28506ed8a37527b6adc04f31627#a23589bc3988a28506ed8a37527b6adc04f31627"
+dependencies = [
+ "futures-channel",
+ "futures-util",
+ "http",
+ "hyper",
+ "jsonrpsee-core 0.15.1",
+ "jsonrpsee-types 0.15.1",
+ "serde",
+ "serde_json",
+ "soketto",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tower",
+ "tracing",
 ]
 
 [[package]]
@@ -2177,14 +2233,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "jsonrpsee-types"
+version = "0.15.1"
+source = "git+https://github.com/eqlabs/jsonrpsee?rev=a23589bc3988a28506ed8a37527b6adc04f31627#a23589bc3988a28506ed8a37527b6adc04f31627"
+dependencies = [
+ "anyhow",
+ "beef",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "jsonrpsee-ws-server"
 version = "0.11.0"
 source = "git+https://github.com/eqlabs/jsonrpsee?branch=start_with_paths#f649a44410cb28424f483c72cefa5a948a06e7af"
 dependencies = [
  "futures-channel",
  "futures-util",
- "jsonrpsee-core",
- "jsonrpsee-types",
+ "jsonrpsee-core 0.11.0",
+ "jsonrpsee-types 0.11.0",
  "serde_json",
  "soketto",
  "tokio",
@@ -2794,6 +2863,7 @@ dependencies = [
  "futures",
  "hex-literal",
  "http",
+ "jsonrpsee 0.15.1",
  "lazy_static",
  "metrics",
  "metrics-exporter-prometheus",
@@ -2903,7 +2973,7 @@ dependencies = [
  "futures",
  "hex",
  "hex-literal",
- "jsonrpsee",
+ "jsonrpsee 0.11.0",
  "lazy_static",
  "metrics",
  "pathfinder-common",
@@ -3953,6 +4023,7 @@ dependencies = [
  "base64 0.13.1",
  "bytes",
  "futures",
+ "http",
  "httparse",
  "log",
  "rand",

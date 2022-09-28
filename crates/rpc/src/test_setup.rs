@@ -94,10 +94,42 @@ impl<'a, StorageInitIter> TestWithStorage<'a, StorageInitIter> {
         }
     }
 
+    /// # Usage
+    ///
     /// Initialize test setup with a single json array.
     /// Each item in the json array corresponds to a separate test case.
-    /// **Any other json type will be automatically wrapped in a json
-    /// array and treated as a single test case.**
+    /// Each test case can either be a:
+    /// - json array, to represent **positional args**,
+    /// - or a json object, to represent **named args**.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// with_params_json(json!([
+    ///     ["a single", "positional test case"]
+    /// ]))
+    /// with_params_json(json!([
+    ///     {"arg0": "a single",
+    ///      "arg1": "named test case"}
+    /// ]))
+    /// with_params_json(json!([
+    ///     ["1st", "positional test case"],
+    ///     ["2nd", "positional", "test case"]
+    /// ]))
+    /// with_params_json(json!([
+    ///     {"arg0": "1st",
+    ///      "arg1": "named test case"},
+    ///     {"arg0": "2nd",
+    ///      "arg1": "named test",
+    ///      "arg2": "case"}
+    /// ]))
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if the outer most json type is not an array.
+    ///
+    /// # Rationale
     ///
     /// Useful for handling test cases where consecutive param sets
     /// contain vastly different variants.
@@ -107,7 +139,10 @@ impl<'a, StorageInitIter> TestWithStorage<'a, StorageInitIter> {
     ) -> TestWithParams<'a, StorageInitIter, impl Clone + Iterator<Item = serde_json::Value>> {
         let params = match params {
             serde_json::Value::Array(v) => v,
-            _ => vec![params],
+            _ => panic!(
+                "The outer most json type has to be an array that contains parameter sets,
+            either positional or named."
+            ),
         };
 
         TestWithParams {
@@ -280,7 +315,6 @@ where
     {
         use crate::{RpcApi, RpcServer, SyncState};
         use futures::stream::StreamExt;
-        use jsonrpsee::rpc_params;
         use pathfinder_common::{Chain, ChainId};
         use starknet_gateway_client::Client;
         use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
@@ -304,8 +338,14 @@ where
         let client = TestClient::v01(addr);
 
         let actual_results = params_iter
-            .map(|params| {
-                let params = rpc_params!(params);
+            .enumerate()
+            .map(|(i, params)| {
+                let params = serde_json::to_value(params).unwrap_or_else(|_| {
+                    panic!(
+                        "failed to serialize input params: line {}, test case {i}",
+                        self.line
+                    )
+                });
                 client.request::<ExpectedOk>(self.method, params)
             })
             .collect::<futures::stream::FuturesOrdered<_>>()

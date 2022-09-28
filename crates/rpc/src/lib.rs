@@ -16,7 +16,7 @@ pub mod v02;
 use crate::metrics::middleware::{MaybeRpcMetricsMiddleware, RpcMetricsMiddleware};
 use jsonrpsee::{
     core::server::rpc_module::Methods,
-    http_server::{HttpServerBuilder, HttpServerHandle, RpcModule},
+    server::{RpcModule, ServerBuilder, ServerHandle},
 };
 use std::{net::SocketAddr, result::Result};
 use tokio::sync::RwLock;
@@ -45,9 +45,9 @@ impl RpcServer {
     }
 
     /// Starts the HTTP-RPC server.
-    pub async fn run(self) -> Result<(HttpServerHandle, SocketAddr), anyhow::Error> {
-        let server = HttpServerBuilder::default()
-            .set_middleware(self.middleware)
+    pub async fn run(self) -> Result<(ServerHandle, SocketAddr), anyhow::Error> {
+        let server = ServerBuilder::default()
+            .set_logger(self.middleware)
             .build(self.addr)
             .await
             .map_err(|e| match e {
@@ -131,8 +131,10 @@ mod tests {
             },
         },
     };
+
+    use jsonrpsee::server::ServerHandle;
+    use stark_hash::StarkHash;
     use std::{
-        collections::BTreeMap,
         net::{Ipv4Addr, SocketAddr, SocketAddrV4},
         sync::Arc,
     };
@@ -141,15 +143,8 @@ mod tests {
     pub async fn run_server(
         addr: SocketAddr,
         api: super::v01::api::RpcApi,
-    ) -> Result<(HttpServerHandle, SocketAddr), anyhow::Error> {
+    ) -> Result<(ServerHandle, SocketAddr), anyhow::Error> {
         RpcServer::new(addr, api).run().await
-    }
-
-    /// Helper function: produces named rpc method args map.
-    pub fn by_name<const N: usize>(
-        params: [(&'_ str, serde_json::Value); N],
-    ) -> Option<ParamsSer<'_>> {
-        Some(BTreeMap::from(params).into())
     }
 
     lazy_static::lazy_static! {
