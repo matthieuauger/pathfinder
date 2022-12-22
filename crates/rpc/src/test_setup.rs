@@ -293,8 +293,9 @@ where
         let (__handle, addr) = RpcServer::new(
             SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0)),
             api,
+            crate::Transport::Http,
         )
-        .run()
+        .run_http()
         .await
         .unwrap();
 

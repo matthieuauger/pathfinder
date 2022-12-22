@@ -1977,9 +1977,9 @@ mod tests {
                 let sync_state = Arc::new(SyncState::default());
                 let api = RpcApi::new(storage, sequencer, set_chain.1, sync_state);
 
-                let (__handle, addr) = RpcServer::new(*LOCALHOST, api)
+                let (__handle, addr) = RpcServer::new(*LOCALHOST, api, crate::Transport::Http)
                     .with_middleware(RpcMetricsMiddleware)
-                    .run()
+                    .run_http()
                     .await
                     .unwrap();
                 let params = rpc_params!();
@@ -2843,9 +2843,9 @@ mod tests {
         let sequencer = Client::new(Chain::Testnet).unwrap();
         let sync_state = Arc::new(SyncState::default());
         let api = RpcApi::new(storage, sequencer, ChainId::TESTNET, sync_state);
-        let (__handle, addr) = RpcServer::new(*LOCALHOST, api)
+        let (__handle, addr) = RpcServer::new(*LOCALHOST, api, crate::Transport::Http)
             .with_middleware(RpcMetricsMiddleware)
-            .run()
+            .run_http()
             .await
             .unwrap();
 

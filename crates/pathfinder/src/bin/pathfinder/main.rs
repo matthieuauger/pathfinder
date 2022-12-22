@@ -10,7 +10,9 @@ use pathfinder_lib::{
     monitoring::{self},
     state,
 };
-use pathfinder_rpc::{cairo, metrics::middleware::RpcMetricsMiddleware, SyncState};
+use pathfinder_rpc::{
+    cairo, metrics::middleware::RpcMetricsMiddleware, ServerHandle, SyncState, Transport,
+};
 use pathfinder_storage::{JournalMode, Storage};
 use starknet_gateway_client::ClientApi;
 use starknet_gateway_types::pending::PendingData;
@@ -290,46 +292,100 @@ If you are trying to setup a custom StarkNet please use '--network custom',
         false => api,
     };
 
-    let (rpc_handle, local_addr) = pathfinder_rpc::RpcServer::new(config.http_rpc_addr, api)
+    let rpc_transport = match config.rpc_transport {
+        Some(transport) => match transport.as_str() {
+            "http" => Transport::Http,
+            "ws" => Transport::Ws,
+            other => {
+                anyhow::bail!(
+                    "{other} is not a valid rpc transport. Please specify one of: http, ws."
+                )
+            }
+        },
+        None => Transport::Http,
+    };
+
+    let server_handle = pathfinder_rpc::RpcServer::new(config.http_rpc_addr, api, rpc_transport)
         .with_middleware(RpcMetricsMiddleware)
         .run()
-        .await
-        .context("Starting the RPC server")?;
+        .await;
 
-    info!("📡 HTTP-RPC server started on: {}", local_addr);
+    match server_handle {
+        ServerHandle::Http(http_server_handle) => {
+            let (rpc_handle, local_addr) = http_server_handle.context("Starting the RPC server")?;
+            info!("📡 HTTP-RPC server started on: {}", local_addr);
 
-    let update_handle = tokio::spawn(update::poll_github_for_releases());
+            let update_handle = tokio::spawn(update::poll_github_for_releases());
 
-    // We are now ready.
-    if let Some(ready) = pathfinder_ready {
-        ready.store(true, std::sync::atomic::Ordering::Relaxed);
-    }
+            // We are now ready.
+            if let Some(ready) = pathfinder_ready {
+                ready.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
 
-    // Monitor our spawned process tasks.
-    tokio::select! {
-        result = sync_handle => {
-            match result {
-                Ok(task_result) => tracing::error!("Sync process ended unexpected with: {:?}", task_result),
-                Err(err) => tracing::error!("Sync process ended unexpected; failed to join task handle: {:?}", err),
+            // Monitor our spawned process tasks.
+            tokio::select! {
+                result = sync_handle => {
+                    match result {
+                        Ok(task_result) => tracing::error!("Sync process ended unexpected with: {:?}", task_result),
+                        Err(err) => tracing::error!("Sync process ended unexpected; failed to join task handle: {:?}", err),
+                    }
+                }
+                result = cairo_handle => {
+                    match result {
+                        Ok(task_result) => tracing::error!("Cairo process ended unexpected with: {:?}", task_result),
+                        Err(err) => tracing::error!("Cairo process ended unexpected; failed to join task handle: {:?}", err),
+                    }
+                }
+                _result = rpc_handle => {
+                    // This handle returns () so its not very useful.
+                    tracing::error!("RPC server process ended unexpected");
+                }
+                result = update_handle => {
+                    match result {
+                        Ok(_) => tracing::error!("Release monitoring process ended unexpectedly"),
+                        Err(err) => tracing::error!(error=%err, "Release monitoring process ended unexpectedly"),
+                    }
+                }
             }
         }
-        result = cairo_handle => {
-            match result {
-                Ok(task_result) => tracing::error!("Cairo process ended unexpected with: {:?}", task_result),
-                Err(err) => tracing::error!("Cairo process ended unexpected; failed to join task handle: {:?}", err),
+        ServerHandle::Ws(ws_server_handle) => {
+            let (rpc_handle, local_addr) = ws_server_handle.context("Starting the RPC server")?;
+            info!("📡 WS-RPC server started on: {}", local_addr);
+
+            let update_handle = tokio::spawn(update::poll_github_for_releases());
+
+            // We are now ready.
+            if let Some(ready) = pathfinder_ready {
+                ready.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+
+            // Monitor our spawned process tasks.
+            tokio::select! {
+                result = sync_handle => {
+                    match result {
+                        Ok(task_result) => tracing::error!("Sync process ended unexpected with: {:?}", task_result),
+                        Err(err) => tracing::error!("Sync process ended unexpected; failed to join task handle: {:?}", err),
+                    }
+                }
+                result = cairo_handle => {
+                    match result {
+                        Ok(task_result) => tracing::error!("Cairo process ended unexpected with: {:?}", task_result),
+                        Err(err) => tracing::error!("Cairo process ended unexpected; failed to join task handle: {:?}", err),
+                    }
+                }
+                _result = rpc_handle => {
+                    // This handle returns () so its not very useful.
+                    tracing::error!("RPC server process ended unexpected");
+                }
+                result = update_handle => {
+                    match result {
+                        Ok(_) => tracing::error!("Release monitoring process ended unexpectedly"),
+                        Err(err) => tracing::error!(error=%err, "Release monitoring process ended unexpectedly"),
+                    }
+                }
             }
         }
-        _result = rpc_handle => {
-            // This handle returns () so its not very useful.
-            tracing::error!("RPC server process ended unexpected");
-        }
-        result = update_handle => {
-            match result {
-                Ok(_) => tracing::error!("Release monitoring process ended unexpectedly"),
-                Err(err) => tracing::error!(error=%err, "Release monitoring process ended unexpectedly"),
-            }
-        }
-    }
+    };
 
     Ok(())
 }

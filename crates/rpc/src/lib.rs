@@ -17,23 +17,36 @@ use crate::metrics::middleware::{MaybeRpcMetricsMiddleware, RpcMetricsMiddleware
 use jsonrpsee::{
     core::server::rpc_module::Methods,
     http_server::{HttpServerBuilder, HttpServerHandle, RpcModule},
+    ws_server::{WsServerBuilder, WsServerHandle},
 };
 use std::{net::SocketAddr, result::Result};
 use tokio::sync::RwLock;
 use v01::{api::RpcApi, types::reply::Syncing};
 
+pub enum Transport {
+    Http,
+    Ws,
+}
+
 pub struct RpcServer {
     addr: SocketAddr,
     api: RpcApi,
     middleware: MaybeRpcMetricsMiddleware,
+    transport: Transport,
+}
+
+pub enum ServerHandle {
+    Http(Result<(HttpServerHandle, SocketAddr), anyhow::Error>),
+    Ws(Result<(WsServerHandle, SocketAddr), anyhow::Error>),
 }
 
 impl RpcServer {
-    pub fn new(addr: SocketAddr, api: RpcApi) -> Self {
+    pub fn new(addr: SocketAddr, api: RpcApi, transport: Transport) -> Self {
         Self {
             addr,
             api,
             middleware: MaybeRpcMetricsMiddleware::NoOp,
+            transport,
         }
     }
 
@@ -44,8 +57,15 @@ impl RpcServer {
         }
     }
 
+    pub async fn run(self) -> ServerHandle {
+        match self.transport {
+            Transport::Http => ServerHandle::Http(self.run_http().await),
+            Transport::Ws => ServerHandle::Ws(self.run_ws().await),
+        }
+    }
+
     /// Starts the HTTP-RPC server.
-    pub async fn run(self) -> Result<(HttpServerHandle, SocketAddr), anyhow::Error> {
+    pub async fn run_http(self) -> Result<(HttpServerHandle, SocketAddr), anyhow::Error> {
         let server = HttpServerBuilder::default()
             .set_middleware(self.middleware)
             .build(self.addr)
@@ -89,6 +109,41 @@ Hint: If you are looking to run two instances of pathfinder, you must configure 
             ])
             .map(|handle| (handle, local_addr))?)
     }
+
+    /// Starts the WS-RPC server.
+    pub async fn run_ws(self) -> Result<(WsServerHandle, SocketAddr), anyhow::Error> {
+        let server = WsServerBuilder::default()
+            .set_middleware(self.middleware)
+            .build(self.addr)
+            .await
+            .map_err(|e| match e {
+                jsonrpsee::core::Error::Transport(_) => {
+                    use std::error::Error;
+
+                    if let Some(inner) = e.source().and_then(|inner| inner.downcast_ref::<std::io::Error>()) {
+                        if let std::io::ErrorKind::AddrInUse = inner.kind() {
+                            return anyhow::Error::new(e)
+                                .context(format!("RPC address is already in use: {}.
+
+Hint: This usually means you are already running another instance of pathfinder.
+Hint: If this happens when upgrading, make sure to shut down the first one first.
+Hint: If you are looking to run two instances of pathfinder, you must configure them with different http rpc addresses.", self.addr));
+                        }
+                    }
+
+                    anyhow::Error::new(e)
+                }
+                _ => anyhow::Error::new(e),
+            })?;
+        let local_addr = server.local_addr()?;
+
+        let context_v02: context::RpcContext = (&self.api).into();
+        let module_v02 = v02::register_methods(context_v02)?;
+
+        Ok(server
+            .start(module_v02)
+            .map(|handle| (handle, local_addr))?)
+    }
 }
 
 pub struct SyncState {
@@ -105,7 +160,7 @@ impl Default for SyncState {
 
 #[cfg(test)]
 mod tests {
-    use crate::RpcServer;
+    use crate::{RpcServer, Transport};
     use ethers::types::H256;
     use jsonrpsee::{http_server::HttpServerHandle, types::ParamsSer};
     use pathfinder_common::{
@@ -142,7 +197,7 @@ mod tests {
         addr: SocketAddr,
         api: super::v01::api::RpcApi,
     ) -> Result<(HttpServerHandle, SocketAddr), anyhow::Error> {
-        RpcServer::new(addr, api).run().await
+        RpcServer::new(addr, api, Transport::Http).run_http().await
     }
 
     /// Helper function: produces named rpc method args map.
